@@ -356,24 +356,96 @@ function App() {
     await sendMessageText(text, currentAttachments);
   };
 
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Export as compressed JPEG (0.7 quality) to reduce file size to ~100-300KB
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+        img.src = event.target.result;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setAttachments(prev => [
-          ...prev,
-          {
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: event.target.result // Base64 data URL
-          }
-        ]);
-      };
-      reader.readAsDataURL(file);
+    files.forEach(async (file) => {
+      if (file.type.startsWith('image/')) {
+        try {
+          const compressedDataUrl = await compressImage(file);
+          setAttachments(prev => [
+            ...prev,
+            {
+              name: file.name.replace(/\.[^/.]+$/, "") + ".jpg",
+              type: 'image/jpeg',
+              size: Math.round((compressedDataUrl.length * 3) / 4),
+              data: compressedDataUrl
+            }
+          ]);
+        } catch (err) {
+          console.error('Error compressing image:', err);
+          // Fallback to reading raw image if compression fails
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            setAttachments(prev => [
+              ...prev,
+              {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                data: event.target.result
+              }
+            ]);
+          };
+          reader.readAsDataURL(file);
+        }
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setAttachments(prev => [
+            ...prev,
+            {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: event.target.result // Base64 data URL
+            }
+          ]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
 
     if (fileInputRef.current) {
