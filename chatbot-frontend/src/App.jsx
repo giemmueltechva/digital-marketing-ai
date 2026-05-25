@@ -9,7 +9,14 @@ function App() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
+  const [userName, setUserName] = useState(() => {
+    return localStorage.getItem('libre_ai_username') || '';
+  });
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('libre_ai_username', userName);
+  }, [userName]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -141,7 +148,8 @@ function App() {
     try {
       const response = await axios.post('/api/chat', {
         sessionId: currentSessionId,
-        message: userMessage.text
+        message: userMessage.text,
+        userName: userName
       });
 
       const aiResponseText = response.data?.output || "Sorry, I received an empty response.";
@@ -174,6 +182,17 @@ function App() {
         <div className="brand">
           <Bot className="brand-icon" size={28} />
           <span>Libre AI</span>
+        </div>
+
+        <div className="user-profile">
+          <label className="profile-label">Your Name</label>
+          <input
+            type="text"
+            className="username-input"
+            placeholder="Enter your name..."
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+          />
         </div>
         
         <button className="new-chat-btn" onClick={handleNewChat}>

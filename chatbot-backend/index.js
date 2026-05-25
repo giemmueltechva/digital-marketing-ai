@@ -223,7 +223,7 @@ app.delete('/api/sessions/:sessionId', async (req, res) => {
  * Main chat route. Receives a user message, stores it, pulls history, gets response from Groq, stores response, and returns it.
  */
 app.post('/api/chat', async (req, res) => {
-  const { sessionId, message } = req.body;
+  const { sessionId, message, userName } = req.body;
 
   if (!sessionId || !message) {
     return res.status(400).json({ error: 'sessionId and message are required.' });
@@ -250,8 +250,9 @@ app.post('/api/chat', async (req, res) => {
         .slice(-20);
 
       // Format for Groq
+      const dynamicPrompt = `${SYSTEM_PROMPT}${userName ? `\nThe student's name is ${userName}. Address them by name and personalize your responses.` : ''}`;
       const apiMessages = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: dynamicPrompt },
         ...history.map(msg => ({
           role: msg.role === 'assistant' || msg.role === 'ai' ? 'assistant' : 'user',
           content: msg.content
@@ -337,8 +338,9 @@ app.post('/api/chat', async (req, res) => {
     if (historyError) throw historyError;
 
     // Format context for Groq
+    const dynamicPrompt = `${SYSTEM_PROMPT}${userName ? `\nThe student's name is ${userName}. Address them by name and personalize your responses.` : ''}`;
     const apiMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: dynamicPrompt },
       ...history.map(msg => ({
         role: msg.role === 'assistant' || msg.role === 'ai' ? 'assistant' : 'user',
         content: msg.content
@@ -429,8 +431,9 @@ app.post('/api/chat', async (req, res) => {
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
       .slice(-20);
 
+    const dynamicPrompt = `${SYSTEM_PROMPT}${userName ? `\nThe student's name is ${userName}. Address them by name and personalize your responses.` : ''}`;
     const apiMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: dynamicPrompt },
       ...history.map(msg => ({
         role: msg.role === 'assistant' || msg.role === 'ai' ? 'assistant' : 'user',
         content: msg.content
