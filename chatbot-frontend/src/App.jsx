@@ -18,6 +18,24 @@ const parseQuestionnaire = (text) => {
   return { questionnaire: null, cleanText: text };
 };
 
+const parseMessageAttachments = (text) => {
+  if (!text) return { cleanText: '', attachments: [] };
+
+  const match = text.match(/<attachments-data>([\s\S]*?)<\/attachments-data>/);
+  const cleanText = text.replace(/<attachments-data>[\s\S]*?<\/attachments-data>/, '').trim();
+  
+  const attachments = [];
+  if (match) {
+    const rawData = match[1];
+    const matches = rawData.matchAll(/\[Attached (?:File|PDF|Screenshot\/Image): (.*?)\]/g);
+    for (const m of matches) {
+      attachments.push(m[1]);
+    }
+  }
+  
+  return { cleanText, attachments };
+};
+
 const escapeHtml = (text) => {
   if (!text) return '';
   return text
@@ -130,6 +148,10 @@ function App() {
   const [customInput, setCustomInput] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
 
+  // File attachments state
+  const [attachments, setAttachments] = useState([]);
+  const fileInputRef = useRef(null);
+
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -176,14 +198,16 @@ function App() {
         let parsedActiveQuestionnaire = null;
         const mappedMessages = response.data.map((msg, index, arr) => {
           const isLast = index === arr.length - 1;
-          const { questionnaire, cleanText } = parseQuestionnaire(msg.content);
+          const { questionnaire, cleanText: textAfterQuestionnaire } = parseQuestionnaire(msg.content);
           if (isLast && msg.role === 'assistant' && questionnaire) {
             parsedActiveQuestionnaire = questionnaire;
           }
+          const { cleanText: finalCleanText, attachments: msgAttachments } = parseMessageAttachments(textAfterQuestionnaire);
           return {
             id: msg.id,
             role: msg.role === 'assistant' ? 'ai' : msg.role,
-            text: cleanText
+            text: finalCleanText,
+            attachments: msgAttachments || []
           };
         });
 
@@ -260,15 +284,20 @@ function App() {
     }
   };
 
-  const sendMessageText = async (textToSend) => {
-    if (!textToSend.trim()) return;
+  const sendMessageText = async (textToSend, attachmentsToSend = []) => {
+    if (!textToSend.trim() && attachmentsToSend.length === 0) return;
 
     if (!currentSessionId) {
       alert("Connection Error: No active chat session could be established. Please verify that your backend server is running on http://localhost:5000 and try again.");
       return;
     }
 
-    const userMessage = { id: Date.now(), role: 'user', text: textToSend };
+    const userMessage = { 
+      id: Date.now(), 
+      role: 'user', 
+      text: textToSend,
+      attachments: attachmentsToSend ? attachmentsToSend.map(a => a.name) : []
+    };
     setMessages(prev => {
       // Remove welcome placeholder if sending first message
       const filtered = prev.filter(m => m.id !== 'welcome');
@@ -282,13 +311,20 @@ function App() {
 
       const response = await axios.post('/api/chat', {
         sessionId: currentSessionId,
-        message: userMessage.text,
-        userName: userName
+        message: textToSend,
+        userName: userName,
+        attachments: attachmentsToSend
       });
 
       const aiResponseText = response.data?.output || "Sorry, I received an empty response.";
-      const { questionnaire, cleanText } = parseQuestionnaire(aiResponseText);
-      const aiMessage = { id: Date.now() + 1, role: 'ai', text: cleanText };
+      const { questionnaire, cleanText: textAfterQuestionnaire } = parseQuestionnaire(aiResponseText);
+      const { cleanText: finalCleanText, attachments: msgAttachments } = parseMessageAttachments(textAfterQuestionnaire);
+      const aiMessage = { 
+        id: Date.now() + 1, 
+        role: 'ai', 
+        text: finalCleanText,
+        attachments: msgAttachments || []
+      };
       setMessages(prev => [...prev, aiMessage]);
 
       if (questionnaire) {
@@ -312,10 +348,41 @@ function App() {
   };
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() && attachments.length === 0) return;
     const text = input;
+    const currentAttachments = [...attachments];
     setInput('');
-    await sendMessageText(text);
+    setAttachments([]);
+    await sendMessageText(text, currentAttachments);
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachments(prev => [
+          ...prev,
+          {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: event.target.result // Base64 data URL
+          }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeAttachment = (indexToRemove) => {
+    setAttachments(prev => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const currentQuestion = activeQuestionnaire?.questions?.[currentStep];
@@ -442,8 +509,20 @@ function App() {
               <div className={`avatar ${msg.role === 'ai' ? 'ai-avatar' : 'user-avatar'}`}>
                 {msg.role === 'ai' ? <Bot size={20} /> : <User size={20} />}
               </div>
-              <div className="message-content">
-                {renderMessageContent(msg.text)}
+              <div className="message-body-container">
+                <div className="message-content">
+                  {renderMessageContent(msg.text)}
+                </div>
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="message-attachments-list">
+                    {msg.attachments.map((name, idx) => (
+                      <div key={idx} className="message-attachment-chip" title={name}>
+                        <Paperclip size={12} />
+                        <span>{name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -570,21 +649,50 @@ function App() {
         {/* Input Area */}
         <div className="input-area">
           <div className="input-container">
-            <textarea 
-              className="chat-input" 
-              placeholder="Ask a question about the course..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows="1"
+            {attachments.length > 0 && (
+              <div className="attachment-previews">
+                {attachments.map((file, idx) => (
+                  <div key={idx} className="attachment-preview-chip">
+                    <span className="file-name" title={file.name}>{file.name}</span>
+                    <button className="remove-file-btn" onClick={() => removeAttachment(idx)}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="input-row">
+              <button 
+                className="attach-btn" 
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+                title="Attach screenshots or documents"
+              >
+                <Paperclip size={18} />
+              </button>
+              <textarea 
+                className="chat-input" 
+                placeholder="Ask a question or describe attachments..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows="1"
+              />
+              <button 
+                className="send-btn" 
+                onClick={handleSend}
+                disabled={(!input.trim() && attachments.length === 0) || isLoading}
+              >
+                <Send size={18} />
+              </button>
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+              multiple
             />
-            <button 
-              className="send-btn" 
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-            >
-              <Send size={18} />
-            </button>
           </div>
         </div>
       </main>

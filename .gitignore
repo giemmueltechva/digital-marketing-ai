@@ -34,3 +34,7 @@ chatbot-backend/conversations.json
 dist/
 build/
 out/
+
+# Tesseract OCR language data
+*.traineddata
+**/eng.traineddata

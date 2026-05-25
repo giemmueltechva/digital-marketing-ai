@@ -263,13 +263,20 @@ body {
   margin: 0 auto;
   position: relative;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 0.5rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .input-container:focus-within {
@@ -741,4 +748,112 @@ body {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.9em;
   color: #f472b6; /* subtle pink code accent */
+}
+
+/* File Attachments Styles */
+.attach-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-left: 0.25rem;
+}
+
+.attach-btn:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.attachment-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+}
+
+.attachment-preview-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  max-width: 220px;
+  animation: fadeIn 0.2s ease;
+}
+
+.attachment-preview-chip .file-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.remove-file-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.remove-file-btn:hover {
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+/* Chat bubble attachments rendering */
+.message-body-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.message-attachments-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.message-attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.message-attachment-chip span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.message.user .message-attachment-chip {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.04);
 }

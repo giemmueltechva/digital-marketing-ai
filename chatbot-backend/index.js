@@ -6,13 +6,16 @@ const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const Groq = require('groq-sdk');
+const Tesseract = require('tesseract.js');
+const pdfParse = require('pdf-parse');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS and JSON parsing
+// Enable CORS and JSON parsing with custom payload limit for attachments
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -47,6 +50,32 @@ function writeLocalData(data) {
     fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('Error writing to local JSON database:', err);
+  }
+}
+
+// Parse PDF text from Base64
+async function parsePdf(base64Data) {
+  try {
+    const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(rawBase64, 'base64');
+    const data = await pdfParse(buffer);
+    return data.text || '';
+  } catch (err) {
+    console.error('Error parsing PDF:', err);
+    return `[Error extracting text from PDF: ${err.message}]`;
+  }
+}
+
+// Run OCR on Image from Base64
+async function parseImageOCR(base64Data) {
+  try {
+    const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(rawBase64, 'base64');
+    const result = await Tesseract.recognize(buffer, 'eng');
+    return result.data.text || '';
+  } catch (err) {
+    console.error('Error performing OCR on image:', err);
+    return `[Error performing OCR on image: ${err.message}]`;
   }
 }
 
@@ -254,10 +283,54 @@ app.delete('/api/sessions/:sessionId', async (req, res) => {
  * Main chat route. Receives a user message, stores it, pulls history, gets response from Groq, stores response, and returns it.
  */
 app.post('/api/chat', async (req, res) => {
-  const { sessionId, message, userName } = req.body;
+  const { sessionId, message, userName, attachments } = req.body;
 
   if (!sessionId || !message) {
     return res.status(400).json({ error: 'sessionId and message are required.' });
+  }
+
+  let compiledMessage = message;
+
+  if (attachments && attachments.length > 0) {
+    try {
+      let attachmentTexts = [];
+      for (const attach of attachments) {
+        console.log(`Processing attachment: ${attach.name} (type: ${attach.type})`);
+        
+        // 1. Text Documents
+        if (
+          attach.type.startsWith('text/') || 
+          attach.name.endsWith('.txt') || 
+          attach.name.endsWith('.csv') || 
+          attach.name.endsWith('.json') || 
+          attach.name.endsWith('.md')
+        ) {
+          const rawBase64 = attach.data.includes(',') ? attach.data.split(',')[1] : attach.data;
+          const fileContent = Buffer.from(rawBase64, 'base64').toString('utf8');
+          attachmentTexts.push(`[Attached File: ${attach.name}]\n---\n${fileContent}\n---`);
+        }
+        // 2. PDF Documents
+        else if (attach.type === 'application/pdf' || attach.name.endsWith('.pdf')) {
+          const pdfText = await parsePdf(attach.data);
+          attachmentTexts.push(`[Attached PDF: ${attach.name}]\n---\n${pdfText}\n---`);
+        }
+        // 3. Image Screenshots (OCR)
+        else if (attach.type.startsWith('image/')) {
+          const ocrText = await parseImageOCR(attach.data);
+          attachmentTexts.push(`[Attached Screenshot/Image: ${attach.name}]\n---\n[OCR Text Extracted]:\n${ocrText}\n---`);
+        }
+        // 4. Fallback for other files
+        else {
+          attachmentTexts.push(`[Attached File: ${attach.name} (Unsupported format, contents not read)]`);
+        }
+      }
+      
+      if (attachmentTexts.length > 0) {
+        compiledMessage = `${message}\n\n<attachments-data>\n${attachmentTexts.join('\n\n')}\n</attachments-data>`;
+      }
+    } catch (attachErr) {
+      console.error('Error processing attachments:', attachErr);
+    }
   }
 
   if (useLocalFallback) {
@@ -269,7 +342,7 @@ app.post('/api/chat', async (req, res) => {
         id: crypto.randomUUID(),
         session_id: sessionId,
         role: 'user',
-        content: message,
+        content: compiledMessage,
         created_at: new Date().toISOString()
       };
       data.messages.push(userMsg);
@@ -321,7 +394,7 @@ app.post('/api/chat', async (req, res) => {
             const summaryCompletion = await groq.chat.completions.create({
               messages: [
                 { role: 'system', content: 'Generate a short, concise 3-to-5 word title for a conversation starting with this user message. Return ONLY the title, no quotes, no extra text.' },
-                { role: 'user', content: message }
+                { role: 'user', content: message } // Use original clean message
               ],
               model: 'llama-3.3-70b-versatile',
               temperature: 0.3,
@@ -354,7 +427,7 @@ app.post('/api/chat', async (req, res) => {
       .insert({
         session_id: sessionId,
         role: 'user',
-        content: message
+        content: compiledMessage
       });
 
     if (insertUserError) throw insertUserError;
@@ -417,7 +490,7 @@ app.post('/api/chat', async (req, res) => {
         const summaryCompletion = await groq.chat.completions.create({
           messages: [
             { role: 'system', content: 'Generate a short, concise 3-to-5 word title for a conversation starting with this user message. Return ONLY the title, no quotes, no extra text.' },
-            { role: 'user', content: message }
+            { role: 'user', content: message } // Use original clean message
           ],
           model: 'llama-3.3-70b-versatile',
           temperature: 0.3,
@@ -451,7 +524,7 @@ app.post('/api/chat', async (req, res) => {
       id: crypto.randomUUID(),
       session_id: sessionId,
       role: 'user',
-      content: message,
+      content: compiledMessage,
       created_at: new Date().toISOString()
     };
     data.messages.push(userMsg);
