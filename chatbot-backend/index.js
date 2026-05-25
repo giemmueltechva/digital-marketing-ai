@@ -54,10 +54,11 @@ function writeLocalData(data) {
 // Parse PDF text from Base64
 async function parsePdf(base64Data) {
   try {
-    const pdfParse = require('pdf-parse');
+    const { PDFParse } = require('pdf-parse');
     const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
     const buffer = Buffer.from(rawBase64, 'base64');
-    const data = await pdfParse(buffer);
+    const parser = new PDFParse({ data: buffer });
+    const data = await parser.getText();
     return data.text || '';
   } catch (err) {
     console.error('Error parsing PDF:', err);
@@ -116,6 +117,15 @@ Guidelines for questionnaires:
 2. Keep the number of questions in a single questionnaire to between 1 and 4.
 3. Use "allow_custom": true if the student should be allowed to enter a custom response (a "Something else" input).
 4. If the student answers the questions or replies directly, acknowledge their answers in text and ask any follow-up questions, using a new questionnaire block if needed.
+
+Handling Attachments:
+1. The student can upload files (PDFs, text files, CSVs, markdown) or screenshots/images.
+2. The system automatically extracts text/data from these attachments and appends them to the end of the student's message inside <attachments-data> tags, formatted as:
+   [Attached File/PDF/Screenshot: <filename>]
+   ---
+   <extracted contents>
+   ---
+3. You have full access to these extracted contents. Do NOT tell the student you cannot read or access attachments. Simply use the provided text/data to answer their questions or help them.
 
 Formatting and Meta-Commentary Rules:
 1. Always format your responses using clean, readable markdown structure. Use double line breaks between paragraphs.
