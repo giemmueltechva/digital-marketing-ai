@@ -1,0 +1,36 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+**/.env
+.env*.local
+
+# System/IDE files
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Data Processor temp files and inputs
+data-processor/input_videos/*
+!data-processor/input_videos/.gitkeep
+data-processor/temp/
+data-processor/temp/*
+
+# Backup / Output data (optional - keep if you want to push JSON metadata to Git, but ignore videos)
+# If you don't want processed JSON files on Git, uncomment the next line:
+# data-processor/output_data/*
+
+# Chatbot Backend local database fallback
+chatbot-backend/conversations.json
+
+# Build outputs
+dist/
+build/
+out/
