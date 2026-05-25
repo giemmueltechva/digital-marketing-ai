@@ -8,28 +8,35 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const fetchSessions = async () => {
+    try {
+      setConnectionError(false);
+      const response = await axios.get('/api/sessions');
+      setSessions(response.data);
+      if (response.data.length > 0) {
+        setCurrentSessionId(response.data[0].id);
+      } else {
+        // If no sessions exist, create one
+        await handleNewChat();
+      }
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
+      setConnectionError(true);
+      setMessages([
+        { id: 'error', role: 'ai', text: 'Sorry, we could not connect to the backend server. Please make sure your backend server is running on http://localhost:5000.' }
+      ]);
+    }
+  };
+
   // Fetch sessions on mount
   useEffect(() => {
-    const fetchSessions = async () => {
-      try {
-        const response = await axios.get('/api/sessions');
-        setSessions(response.data);
-        if (response.data.length > 0) {
-          setCurrentSessionId(response.data[0].id);
-        } else {
-          // If no sessions exist, create one
-          handleNewChat();
-        }
-      } catch (error) {
-        console.error('Error fetching sessions:', error);
-      }
-    };
     fetchSessions();
   }, []);
 
@@ -85,7 +92,12 @@ function App() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !currentSessionId) return;
+    if (!input.trim()) return;
+
+    if (!currentSessionId) {
+      alert("Connection Error: No active chat session could be established. Please verify that your backend server is running on http://localhost:5000 and try again.");
+      return;
+    }
 
     const userMessage = { id: Date.now(), role: 'user', text: input };
     setMessages(prev => {
@@ -138,6 +150,15 @@ function App() {
           <PlusCircle size={18} />
           New Chat
         </button>
+
+        {connectionError && (
+          <div className="connection-warning">
+            <p>Unable to connect to backend server.</p>
+            <button onClick={fetchSessions} className="retry-btn">
+              Retry Connection
+            </button>
+          </div>
+        )}
 
         <div className="chat-history">
           {sessions.map((session) => (
