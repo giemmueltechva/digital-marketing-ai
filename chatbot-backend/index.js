@@ -54,6 +54,13 @@ function writeLocalData(data) {
 // Parse PDF text from Base64
 async function parsePdf(base64Data) {
   try {
+    // Force Vercel's bundler to package the PDF worker file
+    if (false) {
+      const fs = require('fs');
+      const path = require('path');
+      fs.readFileSync(path.join(__dirname, 'node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs'));
+    }
+
     require('pdf-parse/worker');
     const { PDFParse } = require('pdf-parse');
     const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;

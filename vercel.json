@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "chatbot-backend/index.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": "node_modules/pdf-parse/dist/pdf-parse/cjs/pdf.worker.mjs"
+      }
     },
     {
       "src": "chatbot-frontend/package.json",
