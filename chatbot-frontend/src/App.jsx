@@ -187,6 +187,67 @@ function App() {
     fetchSessions();
   }, []);
 
+  // Global paste handler to capture images from clipboard
+  useEffect(() => {
+    const handleGlobalPaste = async (e) => {
+      // If the user is currently typing in an input element (like the username field), ignore
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.tagName === 'INPUT') {
+        return;
+      }
+      
+      const items = (e.clipboardData || window.clipboardData)?.items;
+      if (!items) return;
+      
+      let hasImage = false;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          hasImage = true;
+          const file = item.getAsFile();
+          if (file) {
+            try {
+              const compressedDataUrl = await compressImage(file);
+              const filename = `pasted-image-${Date.now()}.jpg`;
+              setAttachments(prev => [
+                ...prev,
+                {
+                  name: filename,
+                  type: 'image/jpeg',
+                  size: Math.round((compressedDataUrl.length * 3) / 4),
+                  data: compressedDataUrl
+                }
+              ]);
+            } catch (err) {
+              console.error('Error compressing pasted image:', err);
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                const filename = `pasted-image-${Date.now()}`;
+                setAttachments(prev => [
+                  ...prev,
+                  {
+                    name: filename,
+                    type: file.type,
+                    size: file.size,
+                    data: event.target.result
+                  }
+                ]);
+              };
+              reader.readAsDataURL(file);
+            }
+          }
+        }
+      }
+      if (hasImage) {
+        e.preventDefault();
+      }
+    };
+    
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, []);
+
   // Fetch messages when active session changes
   useEffect(() => {
     if (!currentSessionId) return;

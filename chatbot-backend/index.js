@@ -1,5 +1,30 @@
 require('dotenv').config();
 const express = require('express');
+
+// Polyfill DOMMatrix for modern pdfjs-dist used in Node.js
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor(init) {
+      this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+      if (!init) return;
+      if (Array.isArray(init)) {
+        this.a = init[0]; this.b = init[1]; this.c = init[2];
+        this.d = init[3]; this.e = init[4]; this.f = init[5];
+      } else if (typeof init === 'string') {
+        const match = init.match(/matrix\(([^)]+)\)/);
+        if (match) {
+          const parts = match[1].split(',').map(parseFloat);
+          this.a = parts[0]; this.b = parts[1]; this.c = parts[2];
+          this.d = parts[3]; this.e = parts[4]; this.f = parts[5];
+        }
+      }
+    }
+    toString() {
+      return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`;
+    }
+  };
+}
+
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
@@ -314,11 +339,11 @@ app.delete('/api/sessions/:sessionId', async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   const { sessionId, message, userName, attachments } = req.body;
 
-  if (!sessionId || !message) {
-    return res.status(400).json({ error: 'sessionId and message are required.' });
+  if (!sessionId || (!message && (!attachments || attachments.length === 0))) {
+    return res.status(400).json({ error: 'sessionId and either message or attachments are required.' });
   }
 
-  let compiledMessage = message;
+  let compiledMessage = message || '';
 
   if (attachments && attachments.length > 0) {
     try {
@@ -355,7 +380,7 @@ app.post('/api/chat', async (req, res) => {
       }
       
       if (attachmentTexts.length > 0) {
-        compiledMessage = `${message}\n\n<attachments-data>\n${attachmentTexts.join('\n\n')}\n</attachments-data>`;
+        compiledMessage = `${message || '[Uploaded attachment(s)]'}\n\n<attachments-data>\n${attachmentTexts.join('\n\n')}\n</attachments-data>`;
       }
     } catch (attachErr) {
       console.error('Error processing attachments:', attachErr);
@@ -423,7 +448,7 @@ app.post('/api/chat', async (req, res) => {
             const summaryCompletion = await groq.chat.completions.create({
               messages: [
                 { role: 'system', content: 'Generate a short, concise 3-to-5 word title for a conversation starting with this user message. Return ONLY the title, no quotes, no extra text.' },
-                { role: 'user', content: message } // Use original clean message
+                { role: 'user', content: message || 'Attachment uploaded' } // Use original clean message or fallback
               ],
               model: 'llama-3.3-70b-versatile',
               temperature: 0.3,
@@ -519,7 +544,7 @@ app.post('/api/chat', async (req, res) => {
         const summaryCompletion = await groq.chat.completions.create({
           messages: [
             { role: 'system', content: 'Generate a short, concise 3-to-5 word title for a conversation starting with this user message. Return ONLY the title, no quotes, no extra text.' },
-            { role: 'user', content: message } // Use original clean message
+            { role: 'user', content: message || 'Attachment uploaded' } // Use original clean message or fallback
           ],
           model: 'llama-3.3-70b-versatile',
           temperature: 0.3,
