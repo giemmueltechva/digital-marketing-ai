@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, Bot, User, PlusCircle, MessageSquare, Trash2, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Send, Bot, User, PlusCircle, MessageSquare, Trash2, X, ChevronLeft, ChevronRight, Pencil, Paperclip } from 'lucide-react';
 
 const parseQuestionnaire = (text) => {
   if (!text) return { questionnaire: null, cleanText: '' };
