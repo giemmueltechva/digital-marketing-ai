@@ -169,6 +169,56 @@ app.get('/api/sessions/:sessionId/messages', async (req, res) => {
 });
 
 /**
+ * DELETE /api/sessions/:sessionId
+ * Deletes a session and its associated messages
+ */
+app.delete('/api/sessions/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+
+  if (useLocalFallback) {
+    try {
+      const data = readLocalData();
+      
+      data.sessions = data.sessions.filter(s => s.id !== sessionId);
+      data.messages = data.messages.filter(m => m.session_id !== sessionId);
+      
+      writeLocalData(data);
+      return res.json({ success: true, message: 'Session deleted locally.' });
+    } catch (err) {
+      console.error('Error deleting local session:', err);
+      return res.status(500).json({ error: 'Failed to delete session locally.' });
+    }
+  }
+
+  try {
+    // Delete messages first to satisfy foreign key constraints if CASCADE is not set
+    await supabase
+      .from('chat_messages')
+      .delete()
+      .eq('session_id', sessionId);
+
+    const { error } = await supabase
+      .from('chat_sessions')
+      .delete()
+      .eq('id', sessionId);
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Session deleted from Supabase.' });
+  } catch (error) {
+    console.warn('Supabase delete failed, falling back to local JSON database:', error.message);
+    useLocalFallback = true;
+
+    // Delete locally
+    const data = readLocalData();
+    data.sessions = data.sessions.filter(s => s.id !== sessionId);
+    data.messages = data.messages.filter(m => m.session_id !== sessionId);
+    writeLocalData(data);
+
+    res.json({ success: true, message: 'Session deleted locally after Supabase failure.' });
+  }
+});
+
+/**
  * POST /api/chat
  * Main chat route. Receives a user message, stores it, pulls history, gets response from Groq, stores response, and returns it.
  */

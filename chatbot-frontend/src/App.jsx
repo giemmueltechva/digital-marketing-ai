@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, Bot, User, PlusCircle, MessageSquare } from 'lucide-react';
+import { Send, Bot, User, PlusCircle, MessageSquare, Trash2 } from 'lucide-react';
 
 function App() {
   const [sessions, setSessions] = useState([]);
@@ -91,6 +91,36 @@ function App() {
     }
   };
 
+  const handleDeleteSession = async (sessionId) => {
+    if (!window.confirm("Are you sure you want to delete this conversation?")) return;
+
+    try {
+      await axios.delete(`/api/sessions/${sessionId}`);
+      
+      setSessions(prev => {
+        const filtered = prev.filter(s => s.id !== sessionId);
+        
+        // If we deleted the current session, select another one
+        if (currentSessionId === sessionId) {
+          if (filtered.length > 0) {
+            setCurrentSessionId(filtered[0].id);
+          } else {
+            setCurrentSessionId(null);
+            setMessages([
+              { id: 'welcome', role: 'ai', text: 'Hello! I am your Libre Academy AI assistant. How can I help you today?' }
+            ]);
+            // Create a new session automatically if none remain
+            handleNewChat();
+          }
+        }
+        return filtered;
+      });
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert("Failed to delete the conversation. Please check your connection.");
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -162,14 +192,28 @@ function App() {
 
         <div className="chat-history">
           {sessions.map((session) => (
-            <button
+            <div
               key={session.id}
-              className={`history-item ${session.id === currentSessionId ? 'active' : ''}`}
-              onClick={() => setCurrentSessionId(session.id)}
+              className={`history-item-container ${session.id === currentSessionId ? 'active' : ''}`}
             >
-              <MessageSquare className="history-item-icon" size={16} />
-              <span className="history-item-title">{session.title}</span>
-            </button>
+              <button
+                className="history-item"
+                onClick={() => setCurrentSessionId(session.id)}
+              >
+                <MessageSquare className="history-item-icon" size={16} />
+                <span className="history-item-title">{session.title}</span>
+              </button>
+              <button
+                className="delete-session-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteSession(session.id);
+                }}
+                title="Delete Conversation"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
         </div>
       </aside>

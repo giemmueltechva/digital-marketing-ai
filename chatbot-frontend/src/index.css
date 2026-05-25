@@ -94,7 +94,28 @@ body {
   gap: 0.5rem;
 }
 
+.history-item-container {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  background-color: transparent;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.history-item-container:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.history-item-container.active {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
 .history-item {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -102,25 +123,22 @@ body {
   border-radius: 8px;
   background-color: transparent;
   color: var(--text-secondary);
-  border: 1px solid transparent;
+  border: none;
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: left;
-  width: 100%;
   font-family: inherit;
   font-size: 0.9rem;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .history-item:hover {
-  background-color: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
-.history-item.active {
-  background-color: var(--bg-tertiary);
+.history-item-container.active .history-item {
   color: var(--text-primary);
-  border-color: var(--border-color);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .history-item-title {
@@ -133,10 +151,36 @@ body {
 .history-item-icon {
   flex-shrink: 0;
   color: var(--text-secondary);
+  transition: color 0.2s ease;
 }
 
-.history-item.active .history-item-icon {
+.history-item-container.active .history-item-icon {
   color: var(--accent-color);
+}
+
+.delete-session-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.5rem;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.history-item-container:hover .delete-session-btn {
+  opacity: 0.7;
+}
+
+.history-item-container:hover .delete-session-btn:hover {
+  opacity: 1;
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
 }
 
 /* Main Chat Area */
