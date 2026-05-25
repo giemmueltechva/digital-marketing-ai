@@ -54,6 +54,7 @@ function writeLocalData(data) {
 // Parse PDF text from Base64
 async function parsePdf(base64Data) {
   try {
+    require('pdf-parse/worker');
     const { PDFParse } = require('pdf-parse');
     const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
     const buffer = Buffer.from(rawBase64, 'base64');
