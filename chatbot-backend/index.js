@@ -99,7 +99,7 @@ async function parsePdf(base64Data) {
   }
 }
 
-// Run OCR on Image from Base64
+// Run OCR on Image from Base64 (fallback for vision model failures)
 async function parseImageOCR(base64Data) {
   try {
     // Force Vercel's bundler to package the eng.traineddata file
@@ -121,6 +121,49 @@ async function parseImageOCR(base64Data) {
   } catch (err) {
     console.error('Error performing OCR on image:', err);
     return `[Error performing OCR on image: ${err.message}]`;
+  }
+}
+
+// Analyze image using Groq's vision-capable model
+async function describeImageWithVision(base64Data) {
+  try {
+    // Ensure the base64 data has a proper data URL prefix for the API
+    const imageUrl = base64Data.includes(',') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
+
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Analyze this image in detail. Describe what you see including any text, data, charts, diagrams, UI elements, people, objects, or scenes. If there is text in the image, transcribe it exactly. Be thorough and comprehensive.'
+            },
+            {
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            }
+          ]
+        }
+      ],
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      temperature: 0.3,
+      max_tokens: 1024,
+    });
+
+    const description = completion.choices[0]?.message?.content || '';
+    if (description.trim()) {
+      console.log('Vision model successfully analyzed image.');
+      return description;
+    }
+
+    // If vision returned empty, fall back to OCR
+    console.log('Vision model returned empty, falling back to OCR...');
+    return await parseImageOCR(base64Data);
+  } catch (err) {
+    console.error('Vision model failed, falling back to OCR:', err.message);
+    // Fall back to OCR if vision model is unavailable or fails
+    return await parseImageOCR(base64Data);
   }
 }
 
@@ -368,10 +411,10 @@ app.post('/api/chat', async (req, res) => {
           const pdfText = await parsePdf(attach.data);
           attachmentTexts.push(`[Attached PDF: ${attach.name}]\n---\n${pdfText}\n---`);
         }
-        // 3. Image Screenshots (OCR)
+        // 3. Image Screenshots (Vision AI + OCR fallback)
         else if (attach.type.startsWith('image/')) {
-          const ocrText = await parseImageOCR(attach.data);
-          attachmentTexts.push(`[Attached Screenshot/Image: ${attach.name}]\n---\n[OCR Text Extracted]:\n${ocrText}\n---`);
+          const imageAnalysis = await describeImageWithVision(attach.data);
+          attachmentTexts.push(`[Attached Screenshot/Image: ${attach.name}]\n---\n[Image Analysis]:\n${imageAnalysis}\n---`);
         }
         // 4. Fallback for other files
         else {
