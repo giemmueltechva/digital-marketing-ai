@@ -77,17 +77,20 @@ async function parsePdf(base64Data) {
 // Run OCR on Image from Base64
 async function parseImageOCR(base64Data) {
   try {
+    // Force Vercel's bundler to package the eng.traineddata file
+    if (false) {
+      const fs = require('fs');
+      const path = require('path');
+      fs.readFileSync(path.join(__dirname, 'eng.traineddata'));
+    }
+
     const Tesseract = require('tesseract.js');
     const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
     const buffer = Buffer.from(rawBase64, 'base64');
-    
-    const cachePath = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'temp');
-    if (!fs.existsSync(cachePath) && !process.env.VERCEL) {
-      fs.mkdirSync(cachePath, { recursive: true });
-    }
 
     const result = await Tesseract.recognize(buffer, 'eng', {
-      cachePath: cachePath
+      langPath: __dirname,
+      gzip: false
     });
     return result.data.text || '';
   } catch (err) {
