@@ -1,6 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, Bot, User, PlusCircle, MessageSquare, Trash2 } from 'lucide-react';
+import { Send, Bot, User, PlusCircle, MessageSquare, Trash2, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+
+const parseQuestionnaire = (text) => {
+  if (!text) return { questionnaire: null, cleanText: '' };
+  const match = text.match(/<questionnaire>([\s\S]*?)<\/questionnaire>/);
+  if (match) {
+    try {
+      const jsonStr = match[1].trim();
+      const questionnaire = JSON.parse(jsonStr);
+      const cleanText = text.replace(/<questionnaire>[\s\S]*?<\/questionnaire>/, '').trim();
+      return { questionnaire, cleanText };
+    } catch (e) {
+      console.error('Failed to parse questionnaire JSON:', e);
+    }
+  }
+  return { questionnaire: null, cleanText: text };
+};
 
 function App() {
   const [sessions, setSessions] = useState([]);
@@ -12,6 +28,14 @@ function App() {
   const [userName, setUserName] = useState(() => {
     return localStorage.getItem('libre_ai_username') || '';
   });
+  
+  // Questionnaire states
+  const [activeQuestionnaire, setActiveQuestionnaire] = useState(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [customInput, setCustomInput] = useState('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
+
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -55,11 +79,19 @@ function App() {
       setIsLoading(true);
       try {
         const response = await axios.get(`/api/sessions/${currentSessionId}/messages`);
-        const mappedMessages = response.data.map(msg => ({
-          id: msg.id,
-          role: msg.role === 'assistant' ? 'ai' : msg.role,
-          text: msg.content
-        }));
+        let parsedActiveQuestionnaire = null;
+        const mappedMessages = response.data.map((msg, index, arr) => {
+          const isLast = index === arr.length - 1;
+          const { questionnaire, cleanText } = parseQuestionnaire(msg.content);
+          if (isLast && msg.role === 'assistant' && questionnaire) {
+            parsedActiveQuestionnaire = questionnaire;
+          }
+          return {
+            id: msg.id,
+            role: msg.role === 'assistant' ? 'ai' : msg.role,
+            text: cleanText
+          };
+        });
 
         if (mappedMessages.length === 0) {
           setMessages([
@@ -68,6 +100,12 @@ function App() {
         } else {
           setMessages(mappedMessages);
         }
+
+        setActiveQuestionnaire(parsedActiveQuestionnaire);
+        setCurrentStep(0);
+        setAnswers({});
+        setCustomInput('');
+        setShowCustomInput(false);
       } catch (error) {
         console.error('Error fetching messages:', error);
         setMessages([
@@ -128,24 +166,26 @@ function App() {
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const sendMessageText = async (textToSend) => {
+    if (!textToSend.trim()) return;
 
     if (!currentSessionId) {
       alert("Connection Error: No active chat session could be established. Please verify that your backend server is running on http://localhost:5000 and try again.");
       return;
     }
 
-    const userMessage = { id: Date.now(), role: 'user', text: input };
+    const userMessage = { id: Date.now(), role: 'user', text: textToSend };
     setMessages(prev => {
       // Remove welcome placeholder if sending first message
       const filtered = prev.filter(m => m.id !== 'welcome');
       return [...filtered, userMessage];
     });
-    setInput('');
     setIsLoading(true);
 
     try {
+      // Close active questionnaire as we are replying
+      setActiveQuestionnaire(null);
+
       const response = await axios.post('/api/chat', {
         sessionId: currentSessionId,
         message: userMessage.text,
@@ -153,8 +193,17 @@ function App() {
       });
 
       const aiResponseText = response.data?.output || "Sorry, I received an empty response.";
-      const aiMessage = { id: Date.now() + 1, role: 'ai', text: aiResponseText };
+      const { questionnaire, cleanText } = parseQuestionnaire(aiResponseText);
+      const aiMessage = { id: Date.now() + 1, role: 'ai', text: cleanText };
       setMessages(prev => [...prev, aiMessage]);
+
+      if (questionnaire) {
+        setActiveQuestionnaire(questionnaire);
+        setCurrentStep(0);
+        setAnswers({});
+        setCustomInput('');
+        setShowCustomInput(false);
+      }
 
       // Reload sessions list to get any title updates (auto-rename)
       const sessionsResponse = await axios.get('/api/sessions');
@@ -166,6 +215,60 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    const text = input;
+    setInput('');
+    await sendMessageText(text);
+  };
+
+  const currentQuestion = activeQuestionnaire?.questions?.[currentStep];
+
+  const handleSelectOption = (optionText) => {
+    if (!currentQuestion) return;
+    const updatedAnswers = { ...answers, [currentQuestion.question]: optionText };
+    setAnswers(updatedAnswers);
+    
+    setShowCustomInput(false);
+    setCustomInput('');
+
+    if (currentStep < activeQuestionnaire.questions.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      submitQuestionnaire(updatedAnswers);
+    }
+  };
+
+  const handleCustomSubmit = () => {
+    if (!customInput.trim()) return;
+    handleSelectOption(customInput.trim());
+  };
+
+  const handleSkipQuestion = () => {
+    if (!currentQuestion) return;
+    const updatedAnswers = { ...answers, [currentQuestion.question]: "[Skipped]" };
+    setAnswers(updatedAnswers);
+    
+    setShowCustomInput(false);
+    setCustomInput('');
+
+    if (currentStep < activeQuestionnaire.questions.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      submitQuestionnaire(updatedAnswers);
+    }
+  };
+
+  const submitQuestionnaire = async (finalAnswers) => {
+    setActiveQuestionnaire(null);
+    const formattedAnswers = Object.entries(finalAnswers)
+      .map(([q, a]) => `- **${q}**: ${a}`)
+      .join('\n');
+    
+    const messageText = `[Form Answers]:\n${formattedAnswers}`;
+    await sendMessageText(messageText);
   };
 
   const handleKeyDown = (e) => {
@@ -262,6 +365,113 @@ function App() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {activeQuestionnaire && currentQuestion && (
+          <div className="questionnaire-card">
+            <div className="questionnaire-header">
+              <span className="questionnaire-title">{activeQuestionnaire.title}</span>
+              <div className="questionnaire-nav">
+                <button 
+                  className="nav-arrow-btn" 
+                  onClick={() => {
+                    setCurrentStep(prev => Math.max(0, prev - 1));
+                    setShowCustomInput(false);
+                    setCustomInput('');
+                  }}
+                  disabled={currentStep === 0}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="step-indicator">{currentStep + 1} of {activeQuestionnaire.questions.length}</span>
+                <button 
+                  className="nav-arrow-btn" 
+                  onClick={() => {
+                    setCurrentStep(prev => Math.min(activeQuestionnaire.questions.length - 1, prev + 1));
+                    setShowCustomInput(false);
+                    setCustomInput('');
+                  }}
+                  disabled={currentStep === activeQuestionnaire.questions.length - 1}
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <button className="close-card-btn" onClick={() => setActiveQuestionnaire(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="questionnaire-body">
+              <h3 className="question-text">{currentQuestion.question}</h3>
+              
+              <div className="options-container">
+                {!showCustomInput ? (
+                  <>
+                    {currentQuestion.options?.map((opt, idx) => (
+                      <button 
+                        key={idx} 
+                        className="option-row"
+                        onClick={() => handleSelectOption(opt)}
+                      >
+                        <span className="option-number">{idx + 1}</span>
+                        <span className="option-text">{opt}</span>
+                        <ChevronRight className="option-arrow" size={16} />
+                      </button>
+                    ))}
+                    
+                    {currentQuestion.allow_custom && (
+                      <button 
+                        className="option-row custom-option-row"
+                        onClick={() => setShowCustomInput(true)}
+                      >
+                        <span className="option-number"><Pencil size={12} /></span>
+                        <span className="option-text">Something else</span>
+                        <ChevronRight className="option-arrow" size={16} />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="custom-input-container">
+                    <input
+                      type="text"
+                      className="custom-input-field"
+                      placeholder="Type your custom answer..."
+                      value={customInput}
+                      onChange={(e) => setCustomInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCustomSubmit();
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <div className="custom-input-actions">
+                      <button 
+                        className="cancel-custom-btn"
+                        onClick={() => setShowCustomInput(false)}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        className="submit-custom-btn"
+                        onClick={handleCustomSubmit}
+                        disabled={!customInput.trim()}
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="questionnaire-footer">
+              <button className="skip-card-btn" onClick={handleSkipQuestion}>
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Input Area */}
         <div className="input-area">
