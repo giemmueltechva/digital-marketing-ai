@@ -18,6 +18,100 @@ const parseQuestionnaire = (text) => {
   return { questionnaire: null, cleanText: text };
 };
 
+const escapeHtml = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+const parseInlineMarkdown = (text) => {
+  let escaped = escapeHtml(text);
+  
+  // Bold: **text** or __text__
+  let html = escaped
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.*?)__/g, '<strong>$1</strong>');
+
+  // Italic: *text* or _text_
+  html = html
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/_(.*?)_/g, '<em>$1</em>');
+
+  // Code: `code`
+  html = html.replace(/`(.*?)`/g, '<code class="markdown-code">$1</code>');
+
+  // Line breaks inside paragraph
+  html = html.replace(/\n/g, '<br />');
+
+  return html;
+};
+
+const renderMessageContent = (text) => {
+  if (!text) return null;
+
+  // Split by double newlines to find paragraphs/blocks
+  const blocks = text.split(/\n\n+/);
+
+  return blocks.map((block, blockIdx) => {
+    block = block.trim();
+    if (!block) return null;
+
+    // Check if it's a header
+    if (block.startsWith('### ')) {
+      const headerText = block.substring(4);
+      return (
+        <h3 key={blockIdx} className="markdown-h3" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(headerText) }} />
+      );
+    }
+    if (block.startsWith('## ')) {
+      const headerText = block.substring(3);
+      return (
+        <h2 key={blockIdx} className="markdown-h2" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(headerText) }} />
+      );
+    }
+    if (block.startsWith('# ')) {
+      const headerText = block.substring(2);
+      return (
+        <h1 key={blockIdx} className="markdown-h1" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(headerText) }} />
+      );
+    }
+
+    // Check if it's a bulleted list (lines starting with * or -)
+    const lines = block.split('\n');
+    const isBulletList = lines.every(line => {
+      const trimmed = line.trim();
+      return trimmed.startsWith('* ') || trimmed.startsWith('- ') || trimmed === '';
+    });
+
+    if (isBulletList) {
+      const items = lines.filter(line => line.trim() !== '');
+      return (
+        <ul key={blockIdx} className="markdown-list">
+          {items.map((item, itemIdx) => {
+            const cleanItem = item.replace(/^[\*\-]\s+/, '');
+            return (
+              <li key={itemIdx} dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(cleanItem) }} />
+            );
+          })}
+        </ul>
+      );
+    }
+
+    // Default paragraph
+    return (
+      <p 
+        key={blockIdx} 
+        className="markdown-paragraph"
+        dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(block) }}
+      />
+    );
+  });
+};
+
 function App() {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
@@ -349,7 +443,7 @@ function App() {
                 {msg.role === 'ai' ? <Bot size={20} /> : <User size={20} />}
               </div>
               <div className="message-content">
-                {msg.text}
+                {renderMessageContent(msg.text)}
               </div>
             </div>
           ))}

@@ -79,6 +79,11 @@ Guidelines for questionnaires:
 2. Keep the number of questions in a single questionnaire to between 1 and 4.
 3. Use "allow_custom": true if the student should be allowed to enter a custom response (a "Something else" input).
 4. If the student answers the questions or replies directly, acknowledge their answers in text and ask any follow-up questions, using a new questionnaire block if needed.
+
+Formatting and Meta-Commentary Rules:
+1. Always format your responses using clean, readable markdown structure. Use double line breaks between paragraphs.
+2. Use bold headers (e.g., ### Key Points) and bullet points (e.g., * Item) to structure lists and summaries. Make sure lists are clean and easy to read.
+3. NEVER write notes, warnings, or planning thoughts to yourself (such as "(Note: This is the final question...)" or "I will summarize after this"). Everything you write must be 100% user-facing response content.
 `;
 
 /**
