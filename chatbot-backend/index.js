@@ -371,7 +371,61 @@ app.delete('/api/sessions/:sessionId', async (req, res) => {
     data.messages = data.messages.filter(m => m.session_id !== sessionId);
     writeLocalData(data);
 
-    res.json({ success: true, message: 'Session deleted locally after Supabase failure.' });
+  }
+});
+
+/**
+ * PUT /api/sessions/:sessionId
+ * Updates a chat session's title (renaming)
+ */
+app.put('/api/sessions/:sessionId', async (req, res) => {
+  const { sessionId } = req.params;
+  const { title } = req.body;
+
+  if (!title || !title.trim()) {
+    return res.status(400).json({ error: 'Title is required.' });
+  }
+
+  if (useLocalFallback) {
+    try {
+      const data = readLocalData();
+      const sessionIndex = data.sessions.findIndex(s => s.id === sessionId);
+      if (sessionIndex === -1) {
+        return res.status(404).json({ error: 'Session not found.' });
+      }
+      data.sessions[sessionIndex].title = title.trim();
+      data.sessions[sessionIndex].updated_at = new Date().toISOString();
+      writeLocalData(data);
+      return res.json(data.sessions[sessionIndex]);
+    } catch (err) {
+      console.error('Error updating local session title:', err);
+      return res.status(500).json({ error: 'Failed to update session title locally.' });
+    }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .update({ title: title.trim(), updated_at: new Date().toISOString() })
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    console.warn('Supabase update failed, falling back to local JSON database:', error.message);
+    useLocalFallback = true;
+
+    const data = readLocalData();
+    const sessionIndex = data.sessions.findIndex(s => s.id === sessionId);
+    if (sessionIndex === -1) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+    data.sessions[sessionIndex].title = title.trim();
+    data.sessions[sessionIndex].updated_at = new Date().toISOString();
+    writeLocalData(data);
+    res.json(data.sessions[sessionIndex]);
   }
 });
 

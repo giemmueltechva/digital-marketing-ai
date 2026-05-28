@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, Bot, User, PlusCircle, MessageSquare, Trash2, X, ChevronLeft, ChevronRight, Pencil, Paperclip } from 'lucide-react';
+import { Send, Bot, User, PlusCircle, MessageSquare, Trash2, X, ChevronLeft, ChevronRight, Pencil, Paperclip, Check } from 'lucide-react';
 
 const parseQuestionnaire = (text) => {
   if (!text) return { questionnaire: null, cleanText: '' };
@@ -147,6 +147,10 @@ function App() {
   const [answers, setAnswers] = useState({});
   const [customInput, setCustomInput] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
+
+  // Editing state for session renaming
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
 
   // File attachments state
   const [attachments, setAttachments] = useState([]);
@@ -342,6 +346,26 @@ function App() {
     } catch (error) {
       console.error('Error deleting session:', error);
       alert("Failed to delete the conversation. Please check your connection.");
+    }
+  };
+
+  const handleRenameSession = async (sessionId, newTitle) => {
+    if (!newTitle.trim()) {
+      alert("Title cannot be empty.");
+      return;
+    }
+
+    try {
+      const response = await axios.put(`/api/sessions/${sessionId}`, { title: newTitle.trim() });
+      const updatedSession = response.data;
+      
+      setSessions(prev => 
+        prev.map(s => s.id === sessionId ? { ...s, title: updatedSession.title } : s)
+      );
+      setEditingSessionId(null);
+    } catch (error) {
+      console.error('Error renaming session:', error);
+      alert("Failed to rename the conversation. Please check your connection.");
     }
   };
 
@@ -610,25 +634,73 @@ function App() {
           {sessions.map((session) => (
             <div
               key={session.id}
-              className={`history-item-container ${session.id === currentSessionId ? 'active' : ''}`}
+              className={`history-item-container ${session.id === currentSessionId ? 'active' : ''} ${editingSessionId === session.id ? 'editing' : ''}`}
             >
-              <button
-                className="history-item"
-                onClick={() => setCurrentSessionId(session.id)}
-              >
-                <MessageSquare className="history-item-icon" size={16} />
-                <span className="history-item-title">{session.title}</span>
-              </button>
-              <button
-                className="delete-session-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteSession(session.id);
-                }}
-                title="Delete Conversation"
-              >
-                <Trash2 size={14} />
-              </button>
+              {editingSessionId === session.id ? (
+                <div className="rename-input-container" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    className="rename-input"
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleRenameSession(session.id, editingTitle);
+                      } else if (e.key === 'Escape') {
+                        setEditingSessionId(null);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    className="rename-action-btn save-btn"
+                    onClick={() => handleRenameSession(session.id, editingTitle)}
+                    title="Save"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    className="rename-action-btn cancel-btn"
+                    onClick={() => setEditingSessionId(null)}
+                    title="Cancel"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    className="history-item"
+                    onClick={() => setCurrentSessionId(session.id)}
+                  >
+                    <MessageSquare className="history-item-icon" size={16} />
+                    <span className="history-item-title">{session.title}</span>
+                  </button>
+                  <div className="history-item-actions">
+                    <button
+                      className="edit-session-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingSessionId(session.id);
+                        setEditingTitle(session.title);
+                      }}
+                      title="Rename Conversation"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      className="delete-session-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSession(session.id);
+                      }}
+                      title="Delete Conversation"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
