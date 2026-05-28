@@ -28,5 +28,11 @@
       "src": "/(.*)",
       "dest": "chatbot-frontend/$1"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/sessions",
+      "schedule": "0 0 * * *"
+    }
   ]
 }
